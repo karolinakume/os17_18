@@ -551,13 +551,13 @@ thread_schedule_tail (struct thread *prev)
 
 /* Compare wakeup ticks of two threads */
 bool
-thread_wakeup_cmp(const struct list_elem *e1,
-                         const struct list_elem *e2,
+thread_wakeup_ticks_less(const struct list_elem *a,
+                         const struct list_elem *b,
                          void *aux UNUSED)
 {
-  struct thread *pt1 = list_entry (e1, struct thread, elem);
-  struct thread *pt2 = list_entry (e2, struct thread, elem);
-  return pt1->wup_ticks < pt2->wup_ticks;
+  struct thread *pta = list_entry (a, struct thread, elem);
+  struct thread *ptb = list_entry (b, struct thread, elem);
+  return pta->wakeup_ticks < ptb->wakeup_ticks;
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and

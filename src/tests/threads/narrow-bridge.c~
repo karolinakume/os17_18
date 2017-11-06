@@ -9,7 +9,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 
- 
+
 void narrow_bridge(unsigned int num_vehicles_left, unsigned int num_vehicles_right,
         unsigned int num_emergency_left, unsigned int num_emergency_right);
 unsigned int rm_em_left, rm_em_right, rm_left, rm_right, current;

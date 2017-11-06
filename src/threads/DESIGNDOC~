@@ -1,0 +1,185 @@
+                        +--------------------+
+                        |         OS         |
+                        | PROJECT 1: THREADS |
+                        |   DESIGN DOCUMENT  |
+                        +--------------------+
+                                   
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Karolina Kume <s8kakume@stud.uni-saarland.de>
+Avinash Kumar <s8avkuma@stud.uni-saarland.de>
+
+---- PRELIMINARIES ----
+In the narrow-bridge.c the printf is left for debugging purposes. However, it causes the output to be not in acceptable format (too many statements). However, if the printf are commented, the test passes successfully. You can keep them to see the order of the vehicles and comment them for the test to pass.
+
+                             ALARM CLOCK
+                             ===========
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+I. Change in the struct thread into the thread.h code, by addding a new member: 
+
+int64_t wup_ticks;
+
+The purpose of this int64_t is to remind the timer_interrupt_handler to wake up the sleeping thread after passing wup_ticks cpu ticks. It is alternative solution to calling thread_yield continuously for putting thread to sleep, hence causing cpu wasted time.
+
+II. Addition of the following bool function into threads.h
+bool thread_wakeup_cmp(const struct list_elem *,
+                              const struct list_elem *,
+                              void *);
+
+It is implemented into the threads.c. Its purpose is to check which thread has the smallest number of wakeup ticks. Its function is to make sure the threads are put into the correct order into the sleeping_threads list, which we will describe in
+
+III. Implementation of II into threads.c as follows:
+bool
+thread_wup_cmp(const struct list_elem *el1,
+                         const struct list_elem *el2, void *aux UNUSED)
+{
+  struct thread *pta = list_entry (el1, struct thread, elem);
+  struct thread *ptb = list_entry (el2, struct thread, elem);
+  return pta->w_up_ticks < ptb->w_up_ticks;
+}
+As described previously, it erves the timer_sleep to put the thread into the correct order into the list of the sleeping_threads
+
+IV. Addition of the following variable into timer.c
+struct list sleeping_threads
+The purpose of this list is to be used by the timer_sleep function: instead of calling thread_yield, it puts the thread into the sleeping_threads list and it is the duty of timer_interrupt to wake the up once their wakeup ticks are passed.
+ 
+V. Adition of the following structure pointers inside timer_interrupt
+struct list_elem *pe;
+  struct thread *pt;
+Their purpose is to iterate through the sleeping_threads list and check if their wakeup ticks are already passed. If this is the case, they are removed from the sleeping thread list and unblocked.
+
+
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe what happens in a call to timer_sleep(),
+>> including the effects of the timer interrupt handler.
+
+In the beginning interrupts are being disabled, as in the last step thread_block will be called and it asserts interrupts are off. First of all the value of the current thread’s wup_ticks is updated to wup_ticks+ticks, that i.e. the thread should wakeup ticks time later. Then the thread is appended into the sleeping_threads list. Lastly the thread is blocked. 
+We have updated also the timer_interrupt function to check the sleeping_threads and wake up the threads that have passed their wakeup ticks.
+
+>> A3: What steps are taken to minimize the amount of time spent in
+>> the timer interrupt handler?
+
+Instead of calling thread_yield inside a loop, which basically wastes CPU cycles, the thread that calls timer_sleep is put into the sleeping_threads list. The timer_interrupt is calling thread_unblock to “wakeup” the threads which have consumed their wakeup ticks. 
+---- SYNCHRONIZATION ----
+
+>> A4: How are race conditions avoided when multiple threads call
+>> timer_sleep() simultaneously?
+
+Since we are disabling interrupts, one thread at a time can access this function. The thread returned by thread_current() will have access to this functionality. 
+
+>> A5: How are race conditions avoided when a timer interrupt occurs
+>> during a call to timer_sleep()?
+
+First of all the current thread is being put into the sleeping threads list and unblocked. This is ensured by the disabling of the interrupts in the beginning.
+
+---- RATIONALE ----
+
+>> A6: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+
+This design is similar to the suggestion given in the assignment, putting the thread into a waiting list. Another design which I tried was blocking the current thread, unblocking the next thread to run and when the ticks are completed blocking the second thread and unblocking the first one. This was to make sure that during the first thread is sleeping another one is running. However this design was not logically correct, since blocking basically puts the thread into waiting mode.
+                     PROD/CONS
+                             =========
+
+---- SYNCHRONIZATION ----
+
+B1: How does your solution guarantee that consumers will hold until
+>>there is something to consume in the buffer?
+
+-- We have used a while loop which checks if the buffer is empty and pops up an mesage as "Buffer is Empty".
+>>The function cond_wait(&notEmpty, &_lock) will ask the thread to wait as the buffer is empty.
+
+>>B2: How does your solution guarantee that producers will hold until
+>>there is some free space in the buffer?
+
+-- We have created a while loop which checks for the Space in the Buffer.
+>>The function cond_wait(&notFull, &_lock) will ask the thread to wait if the buffer is full.
+
+B3: How does your solution preserve a FIFO semantics i.e., the first
+>>character produced will be the first to be consumed?
+
+-- Have used a counter which removes the first element of the buffer when a consumer thread is called.
+>>The counter adds to the next element of the buffer when the producer thread is called.
+
+B4: Give an intuition for why your program preserves safety.
+
+-- We are using the locks on the buffer to preserve safety.The buffer is locked everytime a producer or consumer 
+performs an action on it and the lock is removed once the action is performed.
+
+lock_acquire(&_lock) will lock the Buffer.
+lock_release(&_lock) will unlock the Buffer.
+
+>> B5: Why did you choose this design? Did you consider other design 
+>> alternatives? In what ways is it superior to another design you considered?
+
+We chose this design because with the usage of semaphores and with keeping track for the producer and the consumer the index to the next character there is no possibility for any synchronization error to occur that i.e. printing Hlloe Wrldo instead of the correct string. Also the usage of the lock guarantees exclusive usage of the buffer (no two producers, no two consumers, no one producer one consumer at the same time). Another design which we considered was assigning each thread a specific letter and making it wait for a given amount of time (for Example H must not wait, e wait 1, l wait 2, second l wait 3 units and so on). 
+
+
+                             NARROW BRIDGE
+                             =============
+
+---- SYNCHRONIZATION ----
+
+>> C1: How does your solution guarantee that no more that 3 vehicles 
+>> are crossing the bridge in the same direction?
+We have used a semaphore struct semaphore full which is initialised to 3. Every thread in the ArriveBridge will execute sema_down on this semaphore. On LeaveBridge, the thread will perform sema_up, thus incrementing its value by 1. This design does not allow more than 3 threads at the time in the bridge.
+
+>> C2: What prevents vehicles from opposite directions from crossing the
+>> bridge simultaneously?
+In the design the following agreement has been made: first the left emergency vehicle will pass, then the right emergency vehicles will pass, then the left normal vehicles and in the end the right normal vehicles. We have the unsigned integer counters: rm_em_left (remaining emergency left initialised to the number of the emergency vehicles left) rm_em_right, rm_left, rm_right. We have also the semaphores wait_em_right initialised to 0 and made equal to the number of vehicles emergency right once the emergency left are finished, wait_left which is init to 0 and made equal to the remaining left vehicles when no more right emergency are left, and rm_right init to 0 and made equal to the number of the vehicles in the right direction (not emergency ones) when vehicles from the left are finished. So each category is waiting for another category above to finish.
+
+>> C3: How does your solution grant priority to emergency vehicles over
+>> the queue of vehicles ahead in the same direction?
+A explained in C3, we have used several semaphores. The semaphore wait_right is responsible for preventing the right vehicles from passing and wait_left does this from the normal priority left vehicles. They are initialised to 0. The wait_left is made equal to the number of normal vehicles left once the right_emergency vehicles are finished (the left em have already finished before). The wait_right is initialized to 0 an made equal to nr of right vehicles once all other categories are finished. 
+
+>> C4: How do you guarantee that despite having priority, emergency vehicles
+>> do not start crossing the bridge while there are still vehicles crossing
+>> it in the oposite direction?
+
+As explained in C2, we allow the left emergency vehicles to pass first. The right emergency are blocked by the semaphore wait_em_right which is initialised to 0 and made equal to the number of the vehicles emergency on the right once the left emergency are finished.
+
+>> C5: Explain with examples why your solution does not preserve neither 
+>> fairness nor freedom from starvation, other than what has been indicated 
+>> for emergency vehicles.
+
+First of all, it is not fair because if we have 2 vehicles emergency left and 2 vehicles emergency right this design will allow the left vehicles to pass first and then the right vehicles. Secondly it does not preserve starvation because if we have 10 left emergency vehicles and only 1 right emergency, the right em must wait for the 10 vehicles from the left.
+---- RATIONALE ----
+
+>> C6: Why did you choose this design? Did you consider other design 
+>> alternatives? In what ways is it superior to another design you considered?
+I chose this design because it synchronizes the process using semaphores, which is a very efficient way for synchronization purposes. It is also similar to the reader writer problem solution suggested in the textbook by Galvin, Gagne. Another design which I thought to use was storing the threads in one array in the preferred order and executing them one by one with kernel_thread. This design would not be very elegant from the scheduling point of view.
+
+
+                           SURVEY QUESTIONS
+                           ================
+
+Answering these questions is optional, but it will help us improve the
+course in future semesters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the semester.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future semesters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future semesters or the remaining projects?
+
+>> Any other comments?
+
